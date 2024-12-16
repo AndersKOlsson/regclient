@@ -1,0 +1,55 @@
+name: Twirl release
+
+on:
+  push:
+    branches:
+      - test-new-gh-proj
+
+concurrency:
+  group: release
+  cancel-in-progress: true
+
+jobs:
+  twirl-release:
+    runs-on: ubuntu-latest
+    container:
+      image: europe-docker.pkg.dev/twirldata/twirl/twirl-base:v0.11.2
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - id: auth
+        name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: twirldata-dev
+          token_format: access_token
+          workload_identity_provider: projects/591466497833/locations/global/workloadIdentityPools/anders-test/providers/gh-anderskolsson
+          service_account: twirl-builder@twirldata-dev.iam.gserviceaccount.com
+
+      - name: Login to Google Artifact Registry
+        uses: docker/login-action@v3
+        with:
+          registry: europe-west1-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      # If you use any Dbt jobs, uncomment this step
+      # - name: dbt deps
+      #   run: dbt deps
+      #   working-directory: dbt  # If the dbt project is in a subdirectory, specify the path here
+
+      - name: Twirl release
+        run: twirl release
+        env:
+          #SLACK_WEBHOOK_URL: ${{ secrets.slack_webhook_url }}
+          GIT_COMMIT_HASH: ${{ github.sha }}
+          ORCHESTRATOR_URL: https://porchestrator-porc-dev-727638791797.europe-west1.run.app
+          AUTH_AUDIENCE: https://api.twirldata.dev
